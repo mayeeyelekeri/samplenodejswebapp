@@ -1,0 +1,113 @@
+// Get Nexus group ID based on branch 
+def getNexusGroupIdByBranch(branch) { 
+	if (branch == 'master') { 
+		return "test"; 
+	} else {
+		return "dev"
+	}
+	
+	// ***also need to differentiate between test and production 
+}
+
+pipeline {
+    agent none 
+		triggers {
+		gitlab(
+			  triggerOnPush: true,
+			  triggerOnMergeRequest: true, triggerOpenMergeRequestOnPush: "never",
+			  triggerOnNoteRequest: true,
+			  noteRegex: "Jenkins please retry a build",
+			  skipWorkInProgressMergeRequest: true,
+			  ciSkip: false,
+			  setBuildDescription: true,
+			  addNoteOnMergeRequest: true,
+			  addCiMessage: true,
+			  addVoteOnMergeRequest: true,
+			  acceptMergeRequestOnSuccess: false,
+			  branchFilterType: 'NameBasedFilter',
+			  includeBranchesSpec: "dev",
+			  excludeBranchesSpec: "",
+			  pendingBuildName: "Jenkins",
+			  cancelPendingBuildsOnUpdate: false,
+			  secretToken: "7a6dc5cadf37f3070950e22c05e73cb0")
+		}
+
+    environment {
+        GIT_BRANCH = "*/${env.BRANCH_NAME}"
+        GIT_CREDS = 'ed9a3ff0-498e-4477-b345-6301d3319e27'
+        GIT_REPO = 'git@100.64.8.116:mahesh.mahadeva/samplenodejswebapp.git'
+		FILE1_NAME = 'artifacts/ATF.CGIC.API.zip'
+		FILE2_NAME = 'artifacts/ATF.CGIC.WEB.zip'
+		ATF_API_ARTIFACT_ID = 'ATF.CGIC.API'
+		ATF_WEB_ARTIFACT_ID = 'ATF.CGIC.WEB'
+		NEXUS_VERSION = "NEXUS3"
+        NEXUS_PROTOCOL = "HTTP"
+        NEXUS_URL = "100.64.8.189"
+        NEXUS_REPOSITORY = "samplenodejswebapp"
+        NEXUS_CREDENTIAL_ID = "nexus-creds"
+		NEXUS_GROUP_ID = getNexusGroupIdByBranch(env.BRANCH_NAME)
+        SNAPSHOT_VERSION = "0.1-SNAPSHOT"
+        FILE_TYPE = "jar"
+		NUGET = "nuget.exe"
+		MSBUILD = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\BuildTools\\MSBuild\\15.0\\Bin\\msbuild.exe"
+    }
+    stages {
+        stage('checkout') {
+			agent { node { label 'windowsnode2' } } 
+            steps {
+				checkout([$class: 'GitSCM', branches: [[name: "${GIT_BRANCH}"]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: "${GIT_CREDS}", url: "${GIT_REPO}"]]])
+            }
+        } // end of stage 'checkout' 
+
+		stage('master-checkout') {
+			agent { node { label 'master' } } 
+            steps {
+				checkout([$class: 'GitSCM', branches: [[name: "${GIT_BRANCH}"]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: "${GIT_CREDS}", url: "${GIT_REPO}"]]])
+            }
+        } // end of stage 'checkout' 
+		stage('Env Display') {
+			agent { node { label 'windowsnode2' } } 
+            steps{
+                bat 'hostname'
+				bat 'set'
+				bat 'dotnet --version' 
+				bat 'msbuild -version' 
+				bat 'sonar-scanner --version'
+            }
+        } // end of SonarQube end
+		
+		stage('Quality Check') {
+			agent { node { label 'master' } } 
+			when {
+			  // only build while in within the dev branches
+			  expression { env.BRANCH_NAME.endsWith('dev') }
+			}
+			steps {            
+			  //echo "Building - ${OCP_APPLICATION} for project: ${OCP_PROJECT}"
+			  withSonarQubeEnv('cicd-sonarqube') {
+				sh 'sonar-scanner'
+			  }
+			  // Wait for the quality response
+			  script {
+				def qualitygate = waitForQualityGate()
+				if (qualitygate.status != 'OK' && qualitygate.status != 'WARN') {
+				  error "Pipeline aborted due to quality gate coverage failure: ${qualitygate.status}"
+				}
+			  }
+			}
+        }
+	  
+        stage('SonarQube start'){
+			agent { node { label 'windowsnode2' } } 
+            steps{
+				// msbuild scanner is not working 
+		        bat 'C:\\CI-Root\\sonar-scanner-msbuild\\SonarScanner.MSBuild.exe begin /k:samplenodejswebapp /n:samplenodejswebapp /v:1 /d:sonar.host.url=http://100.64.8.7 /d:sonar.login=fbf3d81dcf9d8441c92a426b38a58eeaad6693e1 /d:sonar.verbose=true'
+				
+				// just a scanner 
+				//bat 'C:\\CI-Root\\sonar-scanner-msbuild\\sonar-scanner-3.1.0.1141\\bin\\sonar-Scanner -Dsonar.projectKey=samplenodejswebapp -Dsonar.projectName=samplenodejswebapp -Dsonar.projectVersion=1.0 -Dsonar.sources=.'
+            }
+        } // end of SonarQube start 
+        
+		
+    } // end of stages 
+}

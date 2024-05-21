@@ -1,0 +1,82 @@
+pipeline {
+    agent none 
+		triggers {
+		gitlab(
+			  triggerOnPush: true,
+			  triggerOnMergeRequest: true, triggerOpenMergeRequestOnPush: "never",
+			  triggerOnNoteRequest: true,
+			  noteRegex: "Jenkins please retry a build",
+			  skipWorkInProgressMergeRequest: true,
+			  ciSkip: false,
+			  setBuildDescription: true,
+			  addNoteOnMergeRequest: true,
+			  addCiMessage: true,
+			  addVoteOnMergeRequest: true,
+			  acceptMergeRequestOnSuccess: false,
+			  branchFilterType: 'NameBasedFilter',
+			  includeBranchesSpec: "dev",
+			  excludeBranchesSpec: "",
+			  pendingBuildName: "Jenkins",
+			  cancelPendingBuildsOnUpdate: false,
+			  secretToken: "7a6dc5cadf37f3070950e22c05e73cb0") 
+		}
+
+    environment {
+        GIT_BRANCH = "*/${env.BRANCH_NAME}"
+        GIT_CREDS = 'ed9a3ff0-498e-4477-b345-6301d3319e27'
+        GIT_REPO = 'git@100.64.8.116:mahesh.mahadeva/samplenodejswebapp.git'
+		FILE_NAME = 'samplenodejsapp-0.0.1.tgz'
+		ARTIFACT_ID = "samplenodejswebapp"
+		NEXUS_VERSION = "NEXUS3"
+        NEXUS_PROTOCOL = "HTTP"
+        NEXUS_URL = "100.64.8.189"
+        NEXUS_REPOSITORY = "test"
+        NEXUS_CREDENTIAL_ID = "nexus-creds"
+		NEXUS_GROUP_ID = "dev"
+		NEXUS_VERSION_ID = "${env.BUILD_NUMBER}"
+        SNAPSHOT_VERSION = "0.0.1"
+        FILE_TYPE = "tgz"
+		NUGET = "nuget.exe"
+		MSBUILD = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\BuildTools\\MSBuild\\15.0\\Bin\\msbuild.exe"
+    }
+    stages {
+        stage('checkout') {
+			agent { node { label 'windowsnode' } } 
+            steps {
+				checkout([$class: 'GitSCM', branches: [[name: "${GIT_BRANCH}"]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: "${GIT_CREDS}", url: "${GIT_REPO}"]]])
+            }
+        } // end of stage 'checkout' 
+
+        stage('SonarQube start'){
+			agent { node { label 'windowsnode' } } 
+            steps{
+				echo 'inside sonar start' 
+		        //bat 'C:\\CI-Root\\sonar-scanner-msbuild\\SonarScanner.MSBuild.exe begin /k:ness-pipeline /n:ness-pipeline /v:33 /d:sonar.host.url=http://100.64.8.7'
+            }
+        } // end of SonarQube start
+		
+        stage('Package') {
+			agent { node { label 'windowsnode' } } 
+            steps{
+				bat 'npm pack'
+				}
+        } // end of stage restore         
+		
+		
+        stage('SonarQube end') {
+			agent { node { label 'windowsnode' } } 
+            steps{
+				echo 'inside sonar end' 
+                //bat 'C:\\CI-Root\\sonar-scanner-msbuild\\SonarScanner.MSBuild.exe end'
+            }
+        } // end of SonarQube end
+		
+		stage('Publish to Nexus') {
+			agent { node { label 'windowsnode' } } 
+            steps{
+				nexusArtifactUploader artifacts: [[artifactId: "${ARTIFACT_ID}", classifier: '', file: "${FILE_NAME}", type: "${FILE_TYPE}"]], credentialsId: "${NEXUS_CREDENTIAL_ID}", groupId: "${NEXUS_GROUP_ID}", nexusUrl: "${NEXUS_URL}", nexusVersion: "${NEXUS_VERSION}", protocol: "${NEXUS_PROTOCOL}", repository: "${NEXUS_REPOSITORY}", version: "${NEXUS_VERSION_ID}"
+            }
+        } // end of stage 'Publish to Nexus' 
+		
+    } // end of stages 
+}

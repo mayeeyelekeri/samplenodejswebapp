@@ -1,0 +1,27 @@
+{
+ "name": "samplenodejsapp",
+ "description": "hello jenkins test app",
+ "version": "0.0.1",
+ "private": true,
+ "scripts": {
+  "init": "mkdir target || ls -lrt target",
+  "build": "npm run init && npm run install-packages1 && npm run install-packages2 && npm run install-packages3 && npm run package && npm run copy-files",
+  "install-packages1": "npm install --save http",
+  "install-packages2": "npm install --save url",
+  "install-packages3": "npm install --save express",
+  "package": "ls -lrt && ls -lrt node_modules && tar cvf samplenodejsapp-0.0.1.tar .",
+  "copy-files": "cp *.* target && cp -r node_modules target && cp -r static target",
+  "start": "node server.js",
+  "test": "jest"
+ },
+ "main": "server.js",
+ "devDependencies": {
+  "chai": "^4.3.7",
+  "mocha": "^1.20.1",
+  "request": "^2.88.2",
+  "supertest": "0.13.0"
+ },
+ "dependencies": {
+  "jest-junit": "^16.0.0"
+ }
+}
